@@ -3,6 +3,7 @@ import random
 import solver
 import tkinter as tk
 import tkinter.font as font
+import threading
 
 # Comment out for true random
 random.seed(5)  # Changable randomizer seed
@@ -151,6 +152,7 @@ def prepsolve():
       button["state"] = tk.DISABLED
   for button in extras:
     button["state"] = tk.DISABLED
+  print("SOLVE INITIATED - BUTTONS LOCKED")
   
   digit = input("Enter a digit to make: ")
   while(digit not in "0123456789" or len(digit) > 1):
@@ -169,17 +171,11 @@ def prepsolve():
   if(color == "A" and options != "RYGCBM"):  # Parity translation
     color = "P" if options == "RGB" else "S"
   
-  # Actual solve for the target digit and color, also logs path
-  presses = solver.solve(state, trial, press, reset, int(digit), color)
-  print("Presses:" + " No presses needed" if presses == "" else presses)
-
-  # Re-enable all buttons
-  for row in buttons:
-    for button in row:
-      button["state"] = tk.NORMAL
-  for button in extras:
-    button["state"] = tk.NORMAL
-  print("SOLVE COMPLETE - BUTTONS UNLOCKED")
+  print("Solve in progress...")
+  # Actual solve for the target digit and color, prints path
+  thread = threading.Thread(target=solver.solve, args=(
+    buttons, extras, state, trial, press, reset, digit, color))
+  thread.start()  # Multithreading allows buttons to change color
 
 def isprimary():
   return (state[0][0] + state[0][2] + state[0][4] +\
