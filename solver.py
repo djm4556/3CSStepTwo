@@ -67,7 +67,7 @@ NUMBERS = [
   "█████"
 ]  # Formations of 3CS digits (big)
 
-DELAY = 2
+DELAY = 1
 
 def log(row, col):
   global presses, press
@@ -175,19 +175,20 @@ def center_make_magenta(board):
 
 def corners():
   global state, trial, digit, color
-  magentas = 6  # Track number of times magenta was pressed (0=6)
+  magentas = 6  # Track number of times magenta was pressed (6=0)
   for corner in ((0, 0, 0, 1), (0, 4, 1, 4), (4, 0, 3, 0), (4, 4, 4, 3)):
   # Corner data in order (row, col, altering_row, altering_col)
+    while(state[corner[2]][corner[3]] != 0):
+    # Set up cells adjacent to the corners
+      while(state[corner[0]][corner[1]] not in (0, 4)):
+        # To do that, get the corner to red/blue and hit it
+        center_make_magenta(state)
+        magentas %= 6
+        magentas += 1
+      check(corner[0], corner[1])
     while((state[corner[0]][corner[1]] + 6 - magentas) % 6 != color):
     # Get the corner to its target state relative to magenta presses
-      while(state[corner[2]][corner[3]] != 0):
-        # To do that, get its altering cell to red
-        while(state[corner[0]][corner[1]] not in (0, 4)):
-          # To do THAT, get its corner to red/blue and hit it
-          center_make_magenta(state)
-          magentas %= 6
-          magentas += 1
-        check(corner[0], corner[1])
+    # (+6 prevents possible negative modulo issues)
       check(corner[2], corner[3])
   # Finally, undo all the magentas
   for i in range(0, 6-magentas):
