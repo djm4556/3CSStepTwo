@@ -10,6 +10,7 @@ random.seed(5)  # Changable randomizer seed
 
 window = tk.Tk()  # Main window of the GUI, initially empty
 COLORNAMES = ["red", "yellow", "green", "cyan", "blue", "magenta"]
+COLORS = "RYGCBM"  # Full names and abbreviations of colors
 buttons = [[None] * 5 for i in range(5)]
 extras = [None] * 3  # Solve and close
 state = [[0] * 5 for i in range(5)]
@@ -163,18 +164,16 @@ def prepsolve():
     options = "RGB" if isprimary() else "YCM"
     print("Only some colors are possible for this digit/board: " + options)
 
-  color = input("Enter a target color (RYGCBM, A for any): ").upper()
-  while(color != "A" and color not in options):  # Color checking
+  color = input("Enter a target color (RYGCBM): ").upper()
+  while(color not in options):  # Color checking
     if(options != "RYGCBM"):  # If options are restricted, print a reminder
       print("Remember, only the following colors work this time: " + options)
-    color = input("Invalid color. Enter a target color (RYGCBM, A for any): ")
-  if(color == "A" and options != "RYGCBM"):  # Parity translation
-    color = "P" if options == "RGB" else "S"
+    color = input("Invalid color. Enter a target color (RYGCBM): ")
   
   print("Solve in progress...")
   # Actual solve for the target digit and color, prints path
   thread = threading.Thread(target=solver.solve, args=(
-    buttons, extras, state, trial, press, reset, digit, color))
+    buttons, extras, state, trial, press, reset, digit, COLORS.index(color)))
   thread.start()  # Multithreading allows buttons to change color
 
 def isprimary():

@@ -4,7 +4,6 @@
 
 import tkinter as tk
 import time
-COLORS = "RYGCBM"
 LETTERS = "ABCDE"
 NUMBERS = [
   "█████"+
@@ -73,7 +72,9 @@ DELAY = 2
 def log(row, col):
   global presses, press
   time.sleep(DELAY)  # Wait, then press
-  presses += (" " + LETTERS[col] + str(row + 1))
+  cell = " " + LETTERS[col] + str(row + 1)
+  print(cell[1:])  # Logging part
+  presses += cell
   press(row, col, True)
 
 def finish():
@@ -97,21 +98,24 @@ def _check():  # Check without pressing (1 if good, 0 if neutral, -1 if bad)
     for test_digit in range(0, 10):  # Check all digits
       if(cells == NUMBERS[test_digit]):  # Formation found!
         print("A formation was found in the grid!")
-        return 1 if test_digit == digit and color in COLORS[
-          test_color] + "APS" else -1  # Check if it matches the target
+        return 1 if test_digit == digit and color ==\
+          test_color else -1  # Check if it matches the target
   return 0  # No formation found in any color/digit combo
 
-def check(row, col):  # Press something and check it, workaround if needed
+def check(row, col=None):  # Press something and check it, workaround if needed
   global press
-  press(row, col, False)
+  if(col == None):  # Array extraction
+    col = row[1]
+    row = row[0]
+  press(row, col, False)  # Trial press
   result = _check()
-  if(result == -1):
+  if(result == -1):  # Workaround
     workaround(row, col)
     result = _check()
-    if(result == -1):
+    if(result == -1):  # Workaround failure?
       print("Error: workaround failed to avoid incorrect formation!")
       exit(1)
-  log(row, col)
+  log(row, col)  # Actual press
   return result == 1
 
 def workaround(row, col):  # If an incorrect digit is made, avoid it
@@ -128,7 +132,7 @@ def solve(_buttons, _extras, _state, _trial, _press, _reset, _digit, _color):
     return presses
   
   # Comment out when testing easy digits
-  if(str(digit) in "0147"):
+  if(digit in (0, 1, 4, 7)):
     print("Easy digits are not fully coded yet!")
     return finish()  # Note: it may be required to solve for easy digits
   
@@ -155,30 +159,60 @@ def solve(_buttons, _extras, _state, _trial, _press, _reset, _digit, _color):
     print("Warning: algorithm failed to solve formation!")
   return finish()  # Print presses even if failed to solve
 
+def magenta(board):
+  for row in range(0, 5):
+    for col in range(0, 5):
+      if(board[row][col] == 5):
+        return row, col
+  return -1, -1
+
+def center_make_magenta(board):
+  cell = magenta(board)
+  while(cell[0] == -1):
+    check(2, 2)
+    cell = magenta(board)
+  check(cell)
+
 def corners():
-  global state, trial, press, reset, digit, color, presses, STEP
-  return
+  global state, trial, digit, color
+  magentas = 6  # Track number of times magenta was pressed (0=6)
+  for corner in ((0, 0, 0, 1), (0, 4, 1, 4), (4, 0, 3, 0), (4, 4, 4, 3)):
+  # Corner data in order (row, col, altering_row, altering_col)
+    while((state[corner[0]][corner[1]] + 6 - magentas) % 6 != color):
+    # Get the corner to its target state relative to magenta presses
+      while(state[corner[2]][corner[3]] != 0):
+        # To do that, get its altering cell to red
+        while(state[corner[0]][corner[1]] not in (0, 4)):
+          # To do THAT, get its corner to red/blue and hit it
+          center_make_magenta(state)
+          magentas %= 6
+          magentas += 1
+        check(corner[0], corner[1])
+      check(corner[2], corner[3])
+  # Finally, undo all the magentas
+  for i in range(0, 6-magentas):
+    center_make_magenta(state)
 
 def edges():
-  global state, trial, press, reset, digit, color, presses, STEP
+  global state, trial, digit, color
   return
 
 def ace135():
-  global state, trial, press, reset, digit, color, presses, STEP
+  global state, trial, digit, color
   return
 
 def midedges():
-  global state, trial, press, reset, digit, color, presses, STEP
+  global state, trial, digit, color
   return
 
 def greens():
-  global state, trial, press, reset, digit, color, presses, STEP
+  global state, trial, digit, color
   return
 
 def cyans():
-  global state, trial, press, reset, digit, color, presses, STEP
+  global state, trial, digit, color
   return
 
 def yellows():
-  global state, trial, press, reset, digit, color, presses, STEP
+  global state, trial, digit, color
   return
