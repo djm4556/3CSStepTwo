@@ -156,19 +156,20 @@ def prepsolve():
   print("SOLVE INITIATED - BUTTONS LOCKED")
   
   digit = input("Enter a digit to make: ")
-  while(digit not in "0123456789" or len(digit) > 1):
+  while(len(digit) != 1 or digit not in "0123456789"):
     digit = input("Invalid digit. Enter a digit to make: ")
+  digit = int(digit)  # Remember to make the digit an integer!
 
   options = "RYGCBM"  # Allowable colors (initially all 6)
-  if(digit not in "0147"):  # Hard digit, check parity
+  if(digit not in (0, 1, 4, 7)):  # Hard digit, check parity
     options = "RGB" if isprimary() else "YCM"
     print("Only some colors are possible for this digit/board: " + options)
 
   color = input("Enter a target color (RYGCBM): ").upper()
-  while(color not in options):  # Color checking
+  while(len(color) != 1 or color not in options):  # Color checking
     if(options != "RYGCBM"):  # If options are restricted, print a reminder
       print("Remember, only the following colors work this time: " + options)
-    color = input("Invalid color. Enter a target color (RYGCBM): ")
+    color = input("Invalid color. Enter a target color (RYGCBM): ").upper()
   
   print("Solve in progress...")
   # Actual solve for the target digit and color, prints path
