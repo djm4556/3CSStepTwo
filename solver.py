@@ -68,9 +68,9 @@ NUMBERS = [
 ]  # Formations of 3CS digits (big)
 centers = 0  # Not actually used until yellows method
 
-DELAY = 0.01
+DELAY = 0.01  # Delay between presses (for seeing the solve in action)
 
-def log(row, col):
+def log(row, col):  # Press a button and log it
   global presses, press, centers
   time.sleep(DELAY)  # Wait, then press
   cell = " " + LETTERS[col] + str(row + 1)
@@ -81,7 +81,7 @@ def log(row, col):
   presses += cell
   press(row, col, True)
 
-def finish():
+def finish():  # Finish the solve, including unlocking buttons
   global presses, buttons, extras
   print("press" + (" [no presses needed]" if presses == "" else presses))
   for row in buttons:
@@ -128,6 +128,7 @@ def workaround(row, col):  # If an incorrect digit is made, avoid it
   print("Error: workaround not implemented!")
   exit(2)
 
+# The main solve method, which is broken into parts
 def solve(_buttons, _extras, _state, _trial, _press, _reset, _digit, _color):
   # Declaration of all global variables (except centers)
   global buttons, extras, state, trial, press, reset, digit, color, presses, STEP
@@ -185,6 +186,7 @@ def make_magenta(row=2, col=2):  # Way of magenta creating/pressing
     cell = magenta(state)
   check(cell)
 
+# Main solve step 1
 def corners():
   global state
   # Data in order (row, col, altering_row, altering_col)
@@ -199,6 +201,7 @@ def corners():
     while(state[corner[0]][corner[1]] != state[0][0]):
       check(corner[2], corner[3])
 
+# Main solve step 2
 def edges():
   global state
   # 1. Get all corners to red/blue and hit each of them once
@@ -217,6 +220,7 @@ def edges():
     while(state[edge[0]][edge[1]] != state[0][0]):
       check(edge[2], edge[3])
 
+# Main solve step 3
 def ace135():
   global state, digit, color
   # 1. Hit all corners 5 times
@@ -271,13 +275,8 @@ def ace135():
         make_magenta()
       check(4, 0)
     check(3, 1)
-  # 5. Dis/align the corners to the target color depending on the digit
-  # (1: while aligned, alter / else: while unaligned, alter)
-  #while((state[0][0] == color) == (digit == 1)):
-    # Don't use A5 to check the corner states, it may need to be disaligned
-    #make_magenta()
-  # TODO Remove above?
 
+# Main solve step 4
 def midedges():
   global state, digit, color
   # Data in order (row, col, altering_row, altering_col, corner_row, corner_col)
@@ -294,6 +293,7 @@ def midedges():
         check(midedge[4], midedge[5])
       check(midedge[2], midedge[3])
 
+# Main solve step 5
 def greens():  # Short for "altered by green corners"
   global state, digit, color
   # Data in order (row, col, corner_row, corner_col)
@@ -306,6 +306,7 @@ def greens():  # Short for "altered by green corners"
         make_magenta()
       check(green[2], green[3])
 
+# Main solve step 6
 def cyans():  # Short for "altered by cyan corners"
   global state, digit, color
   # Data in order (row, col, corner_row, corner_col)
@@ -332,6 +333,7 @@ def cyans():  # Short for "altered by cyan corners"
       return
     check(2, 2)
 
+# Main solve step 7 (last step)
 def yellows():  # Short for "altered by yellow corners"
   global state, digit, color, centers
   # Fast way for yellow center
