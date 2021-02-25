@@ -102,8 +102,10 @@ def _check():  # Check without pressing (1 if good, 0 if neutral, -1 if bad)
     for test_digit in range(0, 10):  # Check all digits
       if(cells == NUMBERS[test_digit]):  # Formation found!
         print("A formation was found in the grid! (may print multiple times)")
+        # Check if it matches the target
+        # (Incorrect match info: 10s digit color 1-6, 1s digit number found)
         return 1 if test_digit == digit and color ==\
-          test_color else -1  # Check if it matches the target
+          test_color else -10*test_color-test_digit-10
   return 0  # No formation found in any color/digit combo
 
 def check(row, col=None):  # Press something and check it, workaround if needed
@@ -113,10 +115,10 @@ def check(row, col=None):  # Press something and check it, workaround if needed
     row = row[0]
   press(row, col, False)  # Trial press
   result = _check()
-  if(result == -1):  # Workaround
+  if(result < 0):  # Workaround
     workaround(row, col)
     result = _check()
-    if(result == -1):  # Workaround failure?
+    if(result < 0):  # Workaround failure?
       print("Error: workaround failed to avoid incorrect formation!")
       exit(1)
   else:  # Actual press (safe)
@@ -167,10 +169,10 @@ def hit_corners():  # Helper method for hitting all four corners
   check(4, 4)
 
 def hit_altering():  # Helper method for hitting all altering cells from step 1
-  check(0, 3)
-  check(1, 0)
-  check(3, 4)
-  check(4, 1)
+  check(0, 1)
+  check(1, 4)
+  check(3, 0)
+  check(4, 3)
 
 def magenta(board):  # Magenta detection (all magentas work the same)
   for row in range(0, 5):
@@ -190,7 +192,7 @@ def make_magenta(row=2, col=2):  # Way of magenta creating/pressing
 def corners():
   global state
   # Data in order (row, col, altering_row, altering_col)
-  for corner in ((0, 0, 1, 0), (0, 4, 0, 3), (4, 0, 4, 1), (4, 4, 3, 4)):
+  for corner in ((0, 0, 0, 1), (0, 4, 1, 4), (4, 0, 3, 0), (4, 4, 4, 3)):
     # 1. Set up cells adjacent to the corners (helpful here and later)
     while(state[corner[2]][corner[3]] != 0):
       # To do that, get the corner to red/blue and hit it
@@ -210,8 +212,8 @@ def edges():
   hit_corners()
   # Now the altering cells from step 1 are all yellow
   # Data in order (row, col, mid_row, mid_col, altering_row, altering_col)
-  for edge in ((0, 2, 1, 2, 0, 3), (2, 0, 2, 1, 1, 0), (
-    2, 4, 2, 3, 3, 4), (4, 2, 3, 2, 4, 1)):
+  for edge in ((0, 2, 1, 2, 0, 1), (2, 0, 2, 1, 3, 0), (
+    2, 4, 2, 3, 1, 4), (4, 2, 3, 2, 4, 3)):
     # 2. Set up the mid-edges (helpful here and later)
     while(state[edge[2]][edge[3]] != 0):
       # This is known to be yellow
@@ -226,8 +228,6 @@ def ace135():
   # 1. Hit all corners 5 times
   for i in range(0, 5):
     hit_corners()
-  global DELAY
-  #DELAY = 1
   # Now the altering cells are red again
   # 2A. If the digit is 0, a separate order of alterations can make it faster
   if(digit == 0):
@@ -264,7 +264,16 @@ def ace135():
     check(1, 2)
     while(state[2][2] != color):  # Also align center here
       check(3, 2)
+    # This could be optimized, but it would result in a right-facing swastika
+    # Instead, a left-facing swastika is used since that's NOT a hate symbol
     while(state[4][2] == color or state[4][0] == state[0][0]):
+      # Optimizable part: aligning 4,1 specifically
+      while(state[4][1] not in (0, 3, 4)):
+        # ...Which requires aligning 4,0 too
+        while(state[4][0] not in (0, 3, 4)):
+          make_magenta()
+        check(4, 0)
+      # This last part doesn't go away with the optimization
       check(4, 1)
   elif(digit == 7):
     # For 7, disalign the cells that aren't on the top or right edge
@@ -280,8 +289,8 @@ def ace135():
 def midedges():
   global state, digit, color
   # Data in order (row, col, altering_row, altering_col, corner_row, corner_col)
-  for midedge in ((1, 2, 0, 3, 0, 4), (2, 1, 1, 0, 0, 0), (
-    2, 3, 3, 4, 4, 4), (3, 2, 4, 1, 4, 0)):
+  for midedge in ((1, 2, 0, 1, 0, 0), (2, 1, 3, 0, 4, 0), (
+    2, 3, 1, 4, 0, 4), (3, 2, 4, 3, 4, 4)):
     # While the mid-edge is (aligned if absent / disaligned if present)...
     while((state[midedge[0]][midedge[1]] == color) == (
       NUMBERS[digit][midedge[0] * 5 + midedge[1]] == " ")):
