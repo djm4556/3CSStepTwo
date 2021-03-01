@@ -70,16 +70,34 @@ centers = 0  # Not actually used until yellows method
 
 DELAY = 0.01  # Delay between presses (for seeing the solve in action)
 
-def log(row, col):  # Press a button and log it
-  global presses, press, centers
+def cell_name(row, col):
+  return LETTERS[col] + str(row + 1)
+
+def log(row, col, recursive=False):  # Press a button and log it
+  global presses, press, centers, UNDO_LIST
   time.sleep(DELAY)  # Wait, then press
-  cell = " " + LETTERS[col] + str(row + 1)
+  cell = " " + cell_name(row, col)
   if(cell == " C3"):  # Center detection
     centers += 1
     centers %= 6
   #print(cell[1:])  # Logging part
   presses += cell
   press(row, col, True)
+
+  # Try to go through the presses in the undo list
+  while(UNDO_LIST != [] and not recursive):
+    undo_cell = UNDO_LIST[0]
+    undo_row = undo_cell[0]
+    undo_col = undo_cell[1]
+    press(undo_row, undo_col, False)
+
+    safe = _check() >= 0
+    reset()  # Check safety and reset the trial grid
+    if(safe):  # If the press is safe, log it and pop it from the list
+      log(undo_row, undo_col, True)
+      UNDO_LIST.pop(0)
+    else:  # Otherwise, wait until the next chance to go through the list
+      break
 
 def finish():  # Finish the solve, including unlocking buttons
   global presses, buttons, extras
@@ -93,7 +111,7 @@ def finish():  # Finish the solve, including unlocking buttons
   return None
 
 def _check():  # Check without pressing (1 if good, 0 if neutral, -1 if bad)
-  global state, trial, digit, color
+  global state, trial, digit, color, PRINT
   for test_color in range(0, 6):
     cells = ""  # Get each color's pattern
     for row in trial:
@@ -101,12 +119,19 @@ def _check():  # Check without pressing (1 if good, 0 if neutral, -1 if bad)
         cells += "█" if cell == test_color else " "
     for test_digit in range(0, 10):  # Check all digits
       if(cells == NUMBERS[test_digit]):  # Formation found!
-        print("A formation was found in the grid! (may print multiple times)")
-        # Check if it matches the target
-        # (Incorrect match info: 10s digit color 1-6, 1s digit number found)
-        return 1 if test_digit == digit and color ==\
-          test_color else -10*test_color-test_digit-10
-  return 0  # No formation found in any color/digit combo
+        if(PRINT):  # Print that it was found if it's not being spammed
+          print("A formation was found in the grid!")
+        # Check if it's the correct formation
+        correct = test_digit == digit and color == test_color
+        if(correct):  # Correct: wrap up the solve
+          if(PRINT):  # (Also print the first time seeing this)
+            print("\nIt's correct, finishing solve.")
+          PRINT = False
+          return 1
+        else:  # Incorrect: go to workaround
+          PRINT = False  # (Formation encoded as a number)
+          return -10 * test_color - 10 - test_digit
+  return 0  # If no formation found in any color/digit combo, return 0
 
 def check(row, col=None):  # Press something and check it, workaround if needed
   global press, reset
@@ -126,37 +151,136 @@ def check(row, col=None):  # Press something and check it, workaround if needed
   reset()  # Update trial grid with actual press/es
   return result == 1
 
+def print_colors(ary):
+  for row in range(0, 5):
+    row_string = ""
+    for col in range(0, 5):
+      row_string += "RYGCBM"[ary[row][col]] + " "
+    print(row_string[:-1])
+
+def decode(code):
+  # Invalid codes should only be encountered during testing
+  global WORKAROUND_TEST_DIGIT
+  if(not -69 <= code <= -10):
+    return "unknown formation, testing", WORKAROUND_TEST_DIGIT
+  # Extract and return the encoded information
+  color_code = -code // 10 - 1
+  digit_code = -code % 10
+  return ("red", "yellow", "green", "cyan", "blue", "magenta")[
+    color_code], digit_code  # Color first, then digit
+
+def farthest_pressable(row, col):
+  global press, reset
+  pressable = []
+  max_distance = 3
+  for test_row in range(0, 5):
+    for test_col in range(0, 5):
+      distance = abs(test_row - row) + abs(test_col - col)
+      if(distance < max_distance or ((test_row in (0, 5)) and (test_col in (0, 5)))):
+        continue  # Don't bother testing too-close cells or corners
+      if((row in (0, 5)) and (col in (0, 5)) and state[test_row][test_col] == 5):
+        continue  # Also don't bother testing magentas if a corner is being pressed
+      
+      # Check that pressing the cell 6 times won't form anything bad
+      all_safe = True
+      for i in range(0, 6):
+        press(test_row, test_col, False)
+        if(_check() < 0):
+          all_safe = False
+          break
+
+      # If the cell is safe to press 6 times, check its distance
+      if(all_safe):
+        # If it's farther than the former max, clear the list and update the max
+        if(distance > max_distance):
+          max_distance = distance
+          pressable = []
+        # Append the found safe cell regardless of whether the max updated
+        pressable.append([test_row, test_col])
+      # Finally, reset the trial grid for testing the next cell
+      reset()
+  return pressable
+
 def workaround(row, col):  # If an incorrect digit is made, avoid it
-  print("Error: workaround not implemented!")
-  exit(2)
+  global state, trial, press, reset, PRINT, WORKAROUND_TEST_DIGIT, UNDO_LIST
+  WORKAROUND_TEST_DIGIT = 2
+
+  code = _check()
+  decoded = decode(code)
+  full_color = decoded[0]
+  color = full_color[0].upper()
+  digit = decoded[1]
+
+  print("\nInvalid formation detected!")
+  print("Current state:\n")
+  print_colors(state)  # Log as much as possible
+  print("\nAttempted press: " + cell_name(row, col))
+  print("Resulting state:\n")
+  print_colors(trial)  # Print both code and decoded result
+  print("\nFormation: " + str(code) + ", aka: " + full_color + " " + str(digit))
+  reset()  # Finally, reset the trial grid (may need to be moved)
+
+  pressable = farthest_pressable(row, col)  # Determine which cells can be pressed
+  if(pressable == []):
+    print("Error: no pressable cells found in workaround method!")
+    exit(2)  # Possible failure point: farthest_pressable doesn't return anything
+  chosen_cell = pressable[0]  # Choose any of the farthest pressable cells
+  chosen_row = chosen_cell[0]  # Extract the row and column
+  chosen_col = chosen_cell[1]
+
+  for press_count in range(1, 6):
+    # Press the chosen cell some amount of times
+    for i in range(0, press_count):
+      press(chosen_row, chosen_col, False)
+    # Try to press the cell that triggered the workaround
+    press(row, col, False)
+    # Increase the amount until it's safe
+    safe = _check() >= 0
+    reset()
+
+    if(safe):  # If it is safe, log the presses and set up an undo list
+      for i in range(0, press_count):
+        log(chosen_row, chosen_col)
+      log(row, col)  # This extension will undo the presses of the chosen cell
+      UNDO_LIST.extend([(chosen_row, chosen_col)] * (6 - press_count))
+      break
+    elif(press_count == 5):
+      print("Error: workaround failed to safely press a cell!")
+      exit(2)  # Possible failure point: the main part of the workaround failed
+  # Workaround complete, now just reset the printing variable
+  PRINT = True
 
 # The main solve method, which is broken into parts
 def solve(_buttons, _extras, _state, _trial, _press, _reset, _digit, _color):
-  # Declaration of all global variables (except centers)
-  global buttons, extras, state, trial, press, reset, digit, color, presses, STEP
-  buttons, extras, state, trial, press, reset, digit, color, presses, STEP =\
-    _buttons, _extras, _state, _trial, _press, _reset, _digit, _color, "", 1
+  # Setup for most of the global variables (so they can be used across methods)
+  global buttons, extras, state, trial, press, reset,\
+    digit, color, presses, PRINT, UNDO_LIST
+  buttons, extras, state, trial, press, reset,\
+    digit, color, presses, PRINT, UNDO_LIST =\
+    _buttons, _extras, _state, _trial, _press, _reset,\
+    _digit, _color, "", True, []
   if(_check() == 1):  # Already solved?
     print("Already solved? Really?")
     return presses
+
   corners()  # A1, A5, E1, E5
   if(_check() == 1): return finish()
-  STEP = 2
+
   edges()  # A3, C1, C5, E3
   if(_check() == 1): return finish()
-  STEP = 3
+
   ace135()  # C3 + finish ACE135 setup
   if(_check() == 1): return finish()
-  STEP = 4
+
   midedges()  # B3, C2, C4, D3
   if(_check() == 1): return finish()
-  STEP = 5
+
   greens()  # A2, A4, E2, E4
   if(_check() == 1): return finish()
-  STEP = 6
+
   cyans()  # B1, B5, D1, D5
   if(_check() == 1): return finish()
-  STEP = 7
+
   yellows()  # B2, B4, D2, D4
   if(_check() != 1):  # Failed to solve?
     print("Warning: algorithm failed to solve formation!")
@@ -181,12 +305,17 @@ def magenta(board):  # Magenta detection (all magentas work the same)
         return row, col
   return -1, -1
 
-def make_magenta(row=2, col=2):  # Way of magenta creating/pressing
+def make_magenta(row=2, col=2, actual=True):  # Way of magenta creating/pressing
   cell = magenta(state)  # (Defaults to using center)
   while(cell[0] == -1):
-    check(row, col)
+    if(actual):
+      check(row, col)
+    else:
+      press(row, col, False)
+      return _check()
     cell = magenta(state)
   check(cell)
+  return 0
 
 # Main solve step 1
 def corners():
