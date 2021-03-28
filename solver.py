@@ -66,15 +66,14 @@ NUMBERS = [
   "    █"+
   "█████"
 ]  # Formations of 3CS digits (big)
-centers = 0  # Not actually used until yellows method
 
 DELAY = 0.01  # Delay between presses (for seeing the solve in action)
 
 def cell_name(row, col):
   return LETTERS[col] + str(row + 1)
 
-def log(row, col, recursive=False):  # Press a button and log it
-  global presses, press, centers, UNDO_LIST
+def log(row, col):  # Press a button and log it
+  global presses, press, centers
   time.sleep(DELAY)  # Wait, then press
   cell = " " + cell_name(row, col)
   if(cell == " C3"):  # Center detection
@@ -83,21 +82,6 @@ def log(row, col, recursive=False):  # Press a button and log it
   #print(cell[1:])  # Logging part
   presses += cell
   press(row, col, True)
-
-  # Try to go through the presses in the undo list
-  while(UNDO_LIST != [] and not recursive):
-    undo_cell = UNDO_LIST[0]
-    undo_row = undo_cell[0]
-    undo_col = undo_cell[1]
-    press(undo_row, undo_col, False)
-
-    safe = _check() >= 0
-    reset()  # Check safety and reset the trial grid
-    if(safe):  # If the press is safe, log it and pop it from the list
-      log(undo_row, undo_col, True)
-      UNDO_LIST.pop(0)
-    else:  # Otherwise, wait until the next chance to go through the list
-      break
 
 def finish():  # Finish the solve, including unlocking buttons
   global presses, buttons, extras
@@ -108,7 +92,7 @@ def finish():  # Finish the solve, including unlocking buttons
   for button in extras:
     button["state"] = tk.NORMAL
   print("SOLVE COMPLETE - BUTTONS UNLOCKED")
-  return None
+  return "Done!"
 
 def _check():  # Check without pressing (1 if good, 0 if neutral, -1 if bad)
   global state, trial, digit, color, PRINT
@@ -128,13 +112,19 @@ def _check():  # Check without pressing (1 if good, 0 if neutral, -1 if bad)
             print("\nIt's correct, finishing solve.")
           PRINT = False
           return 1
-        else:  # Incorrect: go to workaround
-          PRINT = False  # (Formation encoded as a number)
-          return -10 * test_color - 10 - test_digit
-  return 0  # If no formation found in any color/digit combo, return 0
+        else:  # Incorrect: check if the formation is safe
+          # (Formation encoded as a number)
+          result = -10 * test_color - 10 - test_digit
+          if(decode(result)[1] == ALLOWED):  # Safe: return 0
+            print("\nIt existed at the start, so it's safe.")
+            return 0
+          else:  # Unsafe: return the encoded number
+            PRINT = False
+            return result
+  return 0  # If no incorrect unsafe formation found in any digit/color, return 0
 
 def check(row, col=None):  # Press something and check it, workaround if needed
-  global press, reset
+  global press, reset, ALLOWED
   if(col == None):  # Array extraction
     col = row[1]
     row = row[0]
@@ -173,6 +163,7 @@ def farthest_pressable(row, col):
   global press, reset
   pressable = []
   max_distance = 3
+  reset()  # For accuracy
   for test_row in range(0, 5):
     for test_col in range(0, 5):
       distance = abs(test_row - row) + abs(test_col - col)
@@ -180,7 +171,7 @@ def farthest_pressable(row, col):
         continue  # Don't bother testing too-close cells or corners
       if((row in (0, 5)) and (col in (0, 5)) and state[test_row][test_col] == 5):
         continue  # Also don't bother testing magentas if a corner is being pressed
-      
+
       # Check that pressing the cell 6 times won't form anything bad
       all_safe = True
       for i in range(0, 6):
@@ -202,7 +193,7 @@ def farthest_pressable(row, col):
   return pressable
 
 def workaround(row, col):  # If an incorrect digit is made, avoid it
-  global state, trial, press, reset, PRINT, WORKAROUND_TEST_DIGIT, UNDO_LIST
+  global state, trial, press, reset, STEP, PRINT, WORKAROUND_TEST_DIGIT
   WORKAROUND_TEST_DIGIT = 2
 
   code = _check()
@@ -218,35 +209,10 @@ def workaround(row, col):  # If an incorrect digit is made, avoid it
   print("Resulting state:\n")
   print_colors(trial)  # Print both code and decoded result
   print("\nFormation: " + str(code) + ", aka: " + full_color + " " + str(digit))
-  reset()  # Finally, reset the trial grid (may need to be moved)
 
-  pressable = farthest_pressable(row, col)  # Determine which cells can be pressed
-  if(pressable == []):
-    print("Error: no pressable cells found in workaround method!")
-    exit(2)  # Possible failure point: farthest_pressable doesn't return anything
-  chosen_cell = pressable[0]  # Choose any of the farthest pressable cells
-  chosen_row = chosen_cell[0]  # Extract the row and column
-  chosen_col = chosen_cell[1]
+  # Determine which cells can be pressed 6x (resets trial before and after)
+  pressable = farthest_pressable(row, col)
 
-  for press_count in range(1, 6):
-    # Press the chosen cell some amount of times
-    for i in range(0, press_count):
-      press(chosen_row, chosen_col, False)
-    # Try to press the cell that triggered the workaround
-    press(row, col, False)
-    # Increase the amount until it's safe
-    safe = _check() >= 0
-    reset()
-
-    if(safe):  # If it is safe, log the presses and set up an undo list
-      for i in range(0, press_count):
-        log(chosen_row, chosen_col)
-      log(row, col)  # This extension will undo the presses of the chosen cell
-      UNDO_LIST.extend([(chosen_row, chosen_col)] * (6 - press_count))
-      break
-    elif(press_count == 5):
-      print("Error: workaround failed to safely press a cell!")
-      exit(2)  # Possible failure point: the main part of the workaround failed
   # Workaround complete, now just reset the printing variable
   PRINT = True
 
@@ -254,33 +220,37 @@ def workaround(row, col):  # If an incorrect digit is made, avoid it
 def solve(_buttons, _extras, _state, _trial, _press, _reset, _digit, _color):
   # Setup for most of the global variables (so they can be used across methods)
   global buttons, extras, state, trial, press, reset,\
-    digit, color, presses, PRINT, UNDO_LIST
+    digit, color, presses, centers, ALLOWED, STEP, PRINT
   buttons, extras, state, trial, press, reset,\
-    digit, color, presses, PRINT, UNDO_LIST =\
+    digit, color, presses, centers, ALLOWED, STEP =\
     _buttons, _extras, _state, _trial, _press, _reset,\
-    _digit, _color, "", True, []
-  if(_check() == 1):  # Already solved?
+    _digit, _color, "", 0, -1, 10  # step//10=main-step, step%10=sub-step
+  result = _check()  # Find any initial formation
+  if(result == 1):  # Already solved?
     print("Already solved? Really?")
-    return presses
+    return finish()  # Value not actually used in any "return finish()" lines
+  if(result != 0):  # Formation safe to make?
+    ALLOWED = decode(result)[1]
+  PRINT = True  # Ensure printing starts enabled, then begin
 
   corners()  # A1, A5, E1, E5
   if(_check() == 1): return finish()
-
+  STEP = 20
   edges()  # A3, C1, C5, E3
   if(_check() == 1): return finish()
-
+  STEP = 30
   ace135()  # C3 + finish ACE135 setup
   if(_check() == 1): return finish()
-
+  STEP = 40
   midedges()  # B3, C2, C4, D3
   if(_check() == 1): return finish()
-
+  STEP = 50
   greens()  # A2, A4, E2, E4
   if(_check() == 1): return finish()
-
+  STEP = 60
   cyans()  # B1, B5, D1, D5
   if(_check() == 1): return finish()
-
+  STEP = 70
   yellows()  # B2, B4, D2, D4
   if(_check() != 1):  # Failed to solve?
     print("Warning: algorithm failed to solve formation!")
@@ -319,7 +289,7 @@ def make_magenta(row=2, col=2, actual=True):  # Way of magenta creating/pressing
 
 # Main solve step 1
 def corners():
-  global state
+  global state, STEP
   # Data in order (row, col, altering_row, altering_col)
   for corner in ((0, 0, 0, 1), (0, 4, 1, 4), (4, 0, 3, 0), (4, 4, 4, 3)):
     # 1. Set up cells adjacent to the corners (helpful here and later)
@@ -328,17 +298,21 @@ def corners():
       while(state[corner[0]][corner[1]] not in (0, 4)):
         make_magenta()
       check(corner[0], corner[1])
+    STEP += 1
     # 2. Get the corner to the same state as A1
     while(state[corner[0]][corner[1]] != state[0][0]):
       check(corner[2], corner[3])
+    STEP += 1
 
 # Main solve step 2
 def edges():
-  global state
+  global state, STEP
   # 1. Get all corners to red/blue and hit each of them once
   while(state[0][0] not in (0, 4)):
     make_magenta()
+  STEP += 1
   hit_corners()
+  STEP += 1
   # Now the altering cells from step 1 are all yellow
   # Data in order (row, col, mid_row, mid_col, altering_row, altering_col)
   for edge in ((0, 2, 1, 2, 0, 1), (2, 0, 2, 1, 3, 0), (
@@ -347,16 +321,19 @@ def edges():
     while(state[edge[2]][edge[3]] != 0):
       # This is known to be yellow
       check(edge[4], edge[5])
+    STEP += 1
     # 3. Get the edge to the same state as A1
     while(state[edge[0]][edge[1]] != state[0][0]):
       check(edge[2], edge[3])
+    STEP += 1
 
 # Main solve step 3
 def ace135():
-  global state, digit, color
+  global state, digit, color, STEP
   # 1. Hit all corners 5 times
   for i in range(0, 5):
     hit_corners()
+  STEP += 1
   # Now the altering cells are red again
   # 2A. If the digit is 0, a separate order of alterations can make it faster
   if(digit == 0):
@@ -368,13 +345,15 @@ def ace135():
       check(2, 3)
       check(3, 2)
       make_magenta()
+    STEP += 1
     # Then simply use the altering cells to make the 0 correctly colored
     while(state[0][0] != color):
       hit_altering()
     return
-  # 2. Align the center and other squares (useless if digit is 4)
+  # 2. Align the center and other squares (useless digit is 4)
   while(state[0][0] != state[2][2] and digit != 4):
     hit_altering()
+  STEP += 1
   # 3. Get the edges to the target color
   # (Center will remain aligned if both possible and desired)
   while(state[0][2] != color):
@@ -382,17 +361,21 @@ def ace135():
     check(2, 1)
     check(2, 3)
     check(3, 2)
+  STEP += 1
   # 4. Fix certain squares for certain digits
   if(digit == 1):
     # For 1, disalign the left and right edges (and corners in step 5)
     check(2, 1)
+    STEP += 1
     while(state[2][2] != color):
       check(2, 3)
   elif(digit == 4):
     # For 4, disalign the top and bottom edges, and the BL corner
     check(1, 2)
+    STEP += 1
     while(state[2][2] != color):  # Also align center here
       check(3, 2)
+    STEP += 1
     # This could be optimized, but it would result in a right-facing swastika
     # Instead, a left-facing swastika is used since that's NOT a hate symbol
     while(state[4][2] == color or state[4][0] == state[0][0]):
@@ -412,11 +395,12 @@ def ace135():
       while(state[4][0] in (0, 5)):
         make_magenta()
       check(4, 0)
+    STEP += 1
     check(3, 1)
 
 # Main solve step 4
 def midedges():
-  global state, digit, color
+  global state, digit, color, STEP
   # Data in order (row, col, altering_row, altering_col, corner_row, corner_col)
   for midedge in ((1, 2, 0, 1, 0, 0), (2, 1, 3, 0, 4, 0), (
     2, 3, 1, 4, 0, 4), (3, 2, 4, 3, 4, 4)):
@@ -430,10 +414,11 @@ def midedges():
           make_magenta(4, (4 if midedge[0] == 3 else 0))
         check(midedge[4], midedge[5])
       check(midedge[2], midedge[3])
+    STEP += 1
 
 # Main solve step 5
 def greens():  # Short for "altered by green corners"
-  global state, digit, color
+  global state, digit, color, STEP
   # Data in order (row, col, corner_row, corner_col)
   for green in ((1, 0, 0, 0), (1, 4, 0, 4), (3, 0, 4, 0), (3, 4, 4, 4)):
     # While the green is (aligned if absent / disaligned if present)...
@@ -443,10 +428,11 @@ def greens():  # Short for "altered by green corners"
       while(state[green[2]][green[3]] != 2):
         make_magenta()
       check(green[2], green[3])
+    STEP += 1
 
 # Main solve step 6
 def cyans():  # Short for "altered by cyan corners"
-  global state, digit, color
+  global state, digit, color, STEP
   # Data in order (row, col, corner_row, corner_col)
   for cyan in ((0, 1, 0, 0), (0, 3, 0, 4), (4, 1, 4, 0), (4, 3, 4, 4)):
     # While the cyan is (aligned if absent / disaligned if present)...
@@ -456,6 +442,7 @@ def cyans():  # Short for "altered by cyan corners"
       while(state[cyan[2]][cyan[3]] != 3):
         make_magenta()
       check(cyan[2], cyan[3])
+    STEP += 1
   # Also fix mid-edges here for easy checking (max 6 checks/5 presses)
   for i in range(0, 5):
     aligned = True  # Alignment test
@@ -470,16 +457,19 @@ def cyans():  # Short for "altered by cyan corners"
       print("Warning: Mid-edge fixing in cyans method failed!")
       return
     check(2, 2)
+    STEP += 1
 
 # Main solve step 7 (last step)
 def yellows():  # Short for "altered by yellow corners"
-  global state, digit, color, centers
+  global state, digit, color, centers, STEP
   # Fast way for yellow center
   if(state[2][2] == 1):
+    STEP = 77  # Indicator that yellow center is being used
     # Dis/align the corners to the target color depending on the digit
     # (1: while aligned, alter / else: while unaligned, alter)
     while((state[0][0] == color) == (digit == 1)):
       make_magenta()
+    STEP += 1
     # Already solved?
     if(_check() == 1):
       return
@@ -500,9 +490,11 @@ def yellows():  # Short for "altered by yellow corners"
       while(state[yellow[2]][yellow[3]] != 1):
         make_magenta()
       check(yellow[2], yellow[3])
+    STEP += 1
   # Fix corners and possibly cells near center
   while((state[0][0] == color) == (digit == 1)):
     make_magenta()
+  STEP += 1
   # Already solved?
   if(_check() == 1):
     return
